@@ -1,0 +1,271 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: ebe43dac7e204f34b2fb25eb9dfd524b
+      name: Templates/Power
+  templates:
+    - uuid: 0642bad85c98498298003a30f2c8efc9
+      template: 'APC PDU Temperature-Humidity Sensor by SNMP'
+      name: 'APC PDU Temperature-Humidity Sensor by SNMP'
+      description: |
+        Temperature and humidity from APC AP9335TH/AP9335T probes attached to rPDU2 PDUs (AP8858EU3, AP8xxx, ...).
+        Uses SNMP low-level discovery on rPDU2SensorTempHumidityStatusTable (.1.3.6.1.4.1.318.1.1.26.10.2.2).
+        Only rows with sensor type 1 or 2 are discovered; ports without a probe (type 4) are ignored.
+        Link it ONLY to PDUs that have a probe connected.
+        Default thresholds follow ASHRAE TC 9.9 (recommended 18-27 C, humidity <=60 %; allowable A1 15-32 C, 20-80 %).
+        All thresholds are user macros.
+      groups:
+        - name: Templates/Power
+      macros:
+        - macro: '{$PDU.TEMP.HIGH.WARN}'
+          value: '27'
+          description: 'Temperature warning threshold, high (°C)'
+        - macro: '{$PDU.TEMP.HIGH.CRIT}'
+          value: '32'
+          description: 'Temperature critical threshold, high (°C)'
+        - macro: '{$PDU.TEMP.LOW.WARN}'
+          value: '18'
+          description: 'Temperature warning threshold, low (°C)'
+        - macro: '{$PDU.TEMP.LOW.CRIT}'
+          value: '15'
+          description: 'Temperature critical threshold, low (°C)'
+        - macro: '{$PDU.HUM.HIGH.WARN}'
+          value: '60'
+          description: 'Humidity warning threshold, high (%)'
+        - macro: '{$PDU.HUM.HIGH.CRIT}'
+          value: '80'
+          description: 'Humidity critical threshold, high (%)'
+        - macro: '{$PDU.HUM.LOW.WARN}'
+          value: '25'
+          description: 'Humidity warning threshold, low (%)'
+        - macro: '{$PDU.HUM.LOW.CRIT}'
+          value: '20'
+          description: 'Humidity critical threshold, low (%)'
+        - macro: '{$PDU.EVAL.WINDOW}'
+          value: '5m'
+          description: 'Evaluation window for temperature/humidity triggers'
+        - macro: '{$PDU.NODATA.TIME}'
+          value: '15m'
+          description: 'Time without data before alerting'
+      discovery_rules:
+        - uuid: 4d843f17a3e44c49af1b0ba255f69d79
+          name: 'Temperature/humidity probes'
+          type: SNMP_AGENT
+          snmp_oid: 'discovery[{#SNMPVALUE},.1.3.6.1.4.1.318.1.1.26.10.2.2.1.3,{#TYPE},.1.3.6.1.4.1.318.1.1.26.10.2.2.1.5,{#COMM},.1.3.6.1.4.1.318.1.1.26.10.2.2.1.6]'
+          key: pdu.sensor.discovery
+          delay: 1h
+          filter:
+            evaltype: AND_OR
+            conditions:
+              - macro: '{#TYPE}'
+                value: '^(1|2)$'
+                formulaid: A
+          lifetime: 7d
+          description: 'Only types 1 (temperature) and 2 (temperature+humidity). If the table does not exist the rule becomes unsupported and creates no items.'
+          item_prototypes:
+          - uuid: 0c4339f5f9864afb847440feff73b51d
+            name: 'Sensor {#SNMPINDEX}: temperature'
+            type: SNMP_AGENT
+            snmp_oid: '.1.3.6.1.4.1.318.1.1.26.10.2.2.1.8.{#SNMPINDEX}'
+            key: 'pdu.temp[{#SNMPINDEX}]'
+            delay: 1m
+            history: 30d
+            trends: 365d
+            value_type: FLOAT
+            units: '°C'
+            preprocessing:
+              - type: JAVASCRIPT
+                parameters:
+                  - 'if (value == -1) throw "no reading (-1)"; return value;'
+                error_handler: DISCARD_VALUE
+              - type: MULTIPLIER
+                parameters:
+                  - '0.1'
+            description: 'rPDU2SensorTempHumidityStatusTempC (tenths of °C). -1 is discarded.'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: 4346c8d37fe14993a0abd2471a071c63
+            name: 'Sensor {#SNMPINDEX}: relative humidity'
+            type: SNMP_AGENT
+            snmp_oid: '.1.3.6.1.4.1.318.1.1.26.10.2.2.1.10.{#SNMPINDEX}'
+            key: 'pdu.hum[{#SNMPINDEX}]'
+            delay: 1m
+            history: 30d
+            trends: 365d
+            value_type: FLOAT
+            units: '%'
+            preprocessing:
+              - type: IN_RANGE
+                parameters:
+                  - '0'
+                  - '100'
+                error_handler: DISCARD_VALUE
+            description: 'rPDU2SensorTempHumidityStatusRelativeHumidity. Values outside 0-100 (e.g. -1) are discarded.'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: d0610592e4c44737b0e86aef37742da0
+            name: 'Sensor {#SNMPINDEX}: temperature status (PDU)'
+            type: SNMP_AGENT
+            snmp_oid: '.1.3.6.1.4.1.318.1.1.26.10.2.2.1.9.{#SNMPINDEX}'
+            key: 'pdu.temp.status[{#SNMPINDEX}]'
+            delay: 5m
+            history: 30d
+            trends: 365d
+            value_type: UNSIGNED
+            units: ''
+            valuemap:
+              name: 'APC rPDU2 threshold status'
+            description: 'Status according to the thresholds configured on the PDU itself.'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: 0087d34254324321874458e3005731a3
+            name: 'Sensor {#SNMPINDEX}: humidity status (PDU)'
+            type: SNMP_AGENT
+            snmp_oid: '.1.3.6.1.4.1.318.1.1.26.10.2.2.1.11.{#SNMPINDEX}'
+            key: 'pdu.hum.status[{#SNMPINDEX}]'
+            delay: 5m
+            history: 30d
+            trends: 365d
+            value_type: UNSIGNED
+            units: ''
+            valuemap:
+              name: 'APC rPDU2 threshold status'
+            description: 'Status according to the thresholds configured on the PDU itself.'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: 4b95aec124124b55b4630c8356bec8e9
+            name: 'Sensor {#SNMPINDEX}: communication status'
+            type: SNMP_AGENT
+            snmp_oid: '.1.3.6.1.4.1.318.1.1.26.10.2.2.1.6.{#SNMPINDEX}'
+            key: 'pdu.comm[{#SNMPINDEX}]'
+            delay: 1m
+            history: 30d
+            trends: 365d
+            value_type: UNSIGNED
+            units: ''
+            valuemap:
+              name: 'APC rPDU2 sensor comm status'
+            description: '1 notInstalled, 2 commsOK, 3 commsLost.'
+            tags:
+              - tag: Application
+                value: Sensors
+          trigger_prototypes:
+          - uuid: a020942b85dc4288b9cf5ddf2b0c93e8
+            expression: 'min(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.temp[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})>{$PDU.TEMP.HIGH.WARN} and min(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.temp[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})<={$PDU.TEMP.HIGH.CRIT}'
+            name: 'APC PDU sensor {#SNMPINDEX}: temperature HIGH (warning) > {$PDU.TEMP.HIGH.WARN} °C'
+            opdata: 'Temp: {ITEM.LASTVALUE1}'
+            priority: WARNING
+            description: 'Temperature above the warning threshold (default 27 °C, ASHRAE recommended upper limit).'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: f8d94a92c29d46a0bdd5636970bad1cd
+            expression: 'min(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.temp[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})>{$PDU.TEMP.HIGH.CRIT}'
+            name: 'APC PDU sensor {#SNMPINDEX}: temperature HIGH (critical) > {$PDU.TEMP.HIGH.CRIT} °C'
+            opdata: 'Temp: {ITEM.LASTVALUE1}'
+            priority: HIGH
+            description: 'Temperature above the critical threshold (default 32 °C, ASHRAE A1 allowable upper limit).'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: 011668d977c04db58ea245ca504be309
+            expression: 'max(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.temp[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})<{$PDU.TEMP.LOW.WARN} and max(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.temp[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})>={$PDU.TEMP.LOW.CRIT}'
+            name: 'APC PDU sensor {#SNMPINDEX}: temperature LOW (warning) < {$PDU.TEMP.LOW.WARN} °C'
+            opdata: 'Temp: {ITEM.LASTVALUE1}'
+            priority: WARNING
+            description: 'Temperature below the warning threshold (default 18 °C, ASHRAE recommended lower limit).'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: d7487ef5795f460d94dde5fa06e08289
+            expression: 'max(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.temp[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})<{$PDU.TEMP.LOW.CRIT}'
+            name: 'APC PDU sensor {#SNMPINDEX}: temperature LOW (critical) < {$PDU.TEMP.LOW.CRIT} °C'
+            opdata: 'Temp: {ITEM.LASTVALUE1}'
+            priority: HIGH
+            description: 'Temperature below the critical threshold (default 15 °C, ASHRAE A1 allowable lower limit). Also fires on a faulty probe reading absurdly low values.'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: ab75dd3d25bb47de9b351446d7b30b6a
+            expression: 'min(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.hum[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})>{$PDU.HUM.HIGH.WARN} and min(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.hum[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})<={$PDU.HUM.HIGH.CRIT}'
+            name: 'APC PDU sensor {#SNMPINDEX}: humidity HIGH (warning) > {$PDU.HUM.HIGH.WARN} %'
+            opdata: 'Hum: {ITEM.LASTVALUE1}'
+            priority: WARNING
+            description: 'Relative humidity above the warning threshold (default 60 %, ASHRAE recommended upper limit).'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: e7ed2a265a014e7cb46155972e5e5908
+            expression: 'min(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.hum[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})>{$PDU.HUM.HIGH.CRIT}'
+            name: 'APC PDU sensor {#SNMPINDEX}: humidity HIGH (critical) > {$PDU.HUM.HIGH.CRIT} %'
+            opdata: 'Hum: {ITEM.LASTVALUE1}'
+            priority: HIGH
+            description: 'Relative humidity above the critical threshold (default 80 %, ASHRAE A1 allowable upper limit): condensation and corrosion risk.'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: 9adf102ac2dd48c1b1ec88b567c947a6
+            expression: 'max(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.hum[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})<{$PDU.HUM.LOW.WARN} and max(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.hum[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})>={$PDU.HUM.LOW.CRIT}'
+            name: 'APC PDU sensor {#SNMPINDEX}: humidity LOW (warning) < {$PDU.HUM.LOW.WARN} %'
+            opdata: 'Hum: {ITEM.LASTVALUE1}'
+            priority: WARNING
+            description: 'Relative humidity below the warning threshold (default 25 %): increased electrostatic discharge risk.'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: 4621e814f9dc4f3eae6816bded934512
+            expression: 'max(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.hum[{#SNMPINDEX}],{$PDU.EVAL.WINDOW})<{$PDU.HUM.LOW.CRIT}'
+            name: 'APC PDU sensor {#SNMPINDEX}: humidity LOW (critical) < {$PDU.HUM.LOW.CRIT} %'
+            opdata: 'Hum: {ITEM.LASTVALUE1}'
+            priority: HIGH
+            description: 'Relative humidity below the critical threshold (default 20 %, ASHRAE A1 allowable lower limit).'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: 2e8e1238a89c4be69fde4f5e9d7c686c
+            expression: 'last(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.comm[{#SNMPINDEX}])<>2'
+            name: 'APC PDU sensor {#SNMPINDEX}: probe communication lost'
+            opdata: 'Comm status: {ITEM.LASTVALUE1}'
+            priority: AVERAGE
+            description: 'CommStatus is not commsOK (2): probe unplugged or not responding.'
+            tags:
+              - tag: Application
+                value: Sensors
+          - uuid: f0c297990b694ca5b161b4378151fca7
+            expression: 'nodata(/APC PDU Temperature-Humidity Sensor by SNMP/pdu.temp[{#SNMPINDEX}],{$PDU.NODATA.TIME})=1'
+            name: 'APC PDU sensor {#SNMPINDEX}: no temperature data for {$PDU.NODATA.TIME}'
+            opdata: ''
+            priority: WARNING
+            description: 'No temperature readings are being received from the probe.'
+            tags:
+              - tag: Application
+                value: Sensors
+      valuemaps:
+        - uuid: 730c11fa865e408e950576c8bdc1011b
+          name: 'APC rPDU2 sensor comm status'
+          mappings:
+            - value: '1'
+              newvalue: notInstalled
+            - value: '2'
+              newvalue: commsOK
+            - value: '3'
+              newvalue: commsLost
+        - uuid: eba04ec637154f96947efd8e38cac3de
+          name: 'APC rPDU2 threshold status'
+          mappings:
+            - value: '1'
+              newvalue: notPresent
+            - value: '2'
+              newvalue: belowMin
+            - value: '3'
+              newvalue: belowLow
+            - value: '4'
+              newvalue: normal
+            - value: '5'
+              newvalue: aboveHigh
+            - value: '6'
+              newvalue: aboveMax
