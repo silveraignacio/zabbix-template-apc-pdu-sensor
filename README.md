@@ -93,6 +93,17 @@ A faulty probe that reports absurd values (e.g. −55 °C) will raise the *tempe
 
 All items and triggers carry the tag `Application: Sensors`.
 
+## Graphs (per probe)
+
+| Graph | Item | Notes |
+|---|---|---|
+| `Sensor <idx>: temperature` | Temperature (°C) | gradient line, red |
+| `Sensor <idx>: relative humidity` | Relative humidity (%) | gradient line, blue |
+
+Graphs are graph prototypes of the discovery rule, so each discovered probe gets its own pair under **Monitoring → Hosts → Graphs**. The Y axis is calculated automatically, so small variations stay visible and a faulty probe (e.g. −55 °C) is not clipped. They show the history already collected, and appear after the next discovery run (or *Execute now* on the rule).
+
+Status and communication items have no graph: they are state values, best read in *Latest data*.
+
 ## Repository layout
 
 ```

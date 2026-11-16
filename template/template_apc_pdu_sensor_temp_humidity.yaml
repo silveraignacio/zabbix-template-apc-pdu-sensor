@@ -244,6 +244,23 @@ zabbix_export:
             tags:
               - tag: Application
                 value: Sensors
+          graph_prototypes:
+          - uuid: a7d48a2012a243d38d1e5f0e4a72ba33
+            name: 'Sensor {#SNMPINDEX}: temperature'
+            graph_items:
+              - drawtype: GRADIENT_LINE
+                color: F63100
+                item:
+                  host: 'APC PDU Temperature-Humidity Sensor by SNMP'
+                  key: 'pdu.temp[{#SNMPINDEX}]'
+          - uuid: 61ca88cdde7e447a968abf8d7488e953
+            name: 'Sensor {#SNMPINDEX}: relative humidity'
+            graph_items:
+              - drawtype: GRADIENT_LINE
+                color: 1A7DC0
+                item:
+                  host: 'APC PDU Temperature-Humidity Sensor by SNMP'
+                  key: 'pdu.hum[{#SNMPINDEX}]'
       valuemaps:
         - uuid: 730c11fa865e408e950576c8bdc1011b
           name: 'APC rPDU2 sensor comm status'

@@ -44,6 +44,21 @@ for f in files:
                 errors.append(f"{f}: trigger uses unknown item key {k[1]}")
         if "{#SNMPINDEX}" not in t["name"]:
             errors.append(f"{f}: trigger name lacks LLD macro: {t['name']}")
+    full_keys = {i["key"] for i in rule["item_prototypes"]}
+    graph_names = []
+    for g in rule.get("graph_prototypes", []):
+        graph_names.append(g["name"])
+        if "{#SNMPINDEX}" not in g["name"]:
+            errors.append(f"{f}: graph name lacks LLD macro: {g['name']}")
+        for gi in g["graph_items"]:
+            if gi["item"]["host"] != name:
+                errors.append(f"{f}: graph '{g['name']}' refers to wrong host '{gi['item']['host']}'")
+            if gi["item"]["key"] not in full_keys:
+                errors.append(f"{f}: graph '{g['name']}' uses unknown item key {gi['item']['key']}")
+            if not re.fullmatch(r"[0-9A-F]{6}", gi["color"]):
+                errors.append(f"{f}: graph '{g['name']}' has invalid color {gi['color']}")
+    if len(graph_names) != len(set(graph_names)):
+        errors.append(f"{f}: duplicated graph names")
     vm = {v["name"] for v in tpl.get("valuemaps", [])}
     for i in rule["item_prototypes"]:
         if "valuemap" in i and i["valuemap"]["name"] not in vm:
